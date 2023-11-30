@@ -15,6 +15,7 @@ public class GameGrid : MonoBehaviour
         BUBBLE,
         ROW_CLEAR,
         COLUMN_CLEAR,
+        RAINBOW,
         COUNT,
     };
 
@@ -25,11 +26,23 @@ public class GameGrid : MonoBehaviour
         public GameObject prefab;
     }
 
+    [System.Serializable]
+    public struct PiecePosition
+    {
+        public PieceType type;
+        public int x, y;
+    };
+
     public int xDim, yDim;
     public float fillTime;
 
+    public Level level;
+
     public PiecePrefab[] piecePrefabs;
     public GameObject backgroundPrefab;
+
+    public PiecePosition[] initialPieces;
+
     private Dictionary<PieceType, GameObject> piecePrefabDict;
     private GamePiece[,] pieces;
 
@@ -37,9 +50,16 @@ public class GameGrid : MonoBehaviour
 
     private GamePiece pressedPiece;
     private GamePiece enterdPiece;
+
+    private bool gameOver = false;
+
     public bool IsFilling { get; private set; }
 
     void Start()
+    {
+
+    }
+    void Awake()
     {
         piecePrefabDict = new Dictionary<PieceType, GameObject>();
 
@@ -61,6 +81,16 @@ public class GameGrid : MonoBehaviour
             }
         }
         pieces = new GamePiece[xDim, yDim];
+
+        // instantiating pieces
+        for (int i = 0; i < initialPieces.Length; i++)
+        {
+            if (initialPieces[i].x >= 0 && initialPieces[i].y < xDim
+                                        && initialPieces[i].y >= 0 && initialPieces[i].y < yDim)
+            {
+                SpawNewPiece(initialPieces[i].x, initialPieces[i].y, initialPieces[i].type);
+            }
+        }
 
         for (int x = 0; x < xDim; ++x)
         {
@@ -84,10 +114,11 @@ public class GameGrid : MonoBehaviour
                 //{
                 //    pieces[x, y].ColorComponent.SetColor((ColorPiece.ColorType)Random.Range(0, pieces[x, y].ColorComponent.NumColors));
                 //}
-
-
                 // gen empty & normal piece
-                SpawNewPiece(x, y, PieceType.EMPTY);
+                if (pieces[x, y] == null)
+                {
+                    SpawNewPiece(x, y, PieceType.EMPTY);
+                }
 
             }
         }
@@ -98,26 +129,28 @@ public class GameGrid : MonoBehaviour
         //SpawNewPiece(4, 4, PieceType.BUBBLE);
 
         // some pos demo
-        Destroy(pieces[1, 4].gameObject);
-        SpawNewPiece(1, 4, PieceType.BUBBLE);
+        //Destroy(pieces[1, 4].gameObject);
+        //SpawNewPiece(1, 4, PieceType.BUBBLE);
 
-        Destroy(pieces[2, 4].gameObject);
-        SpawNewPiece(2, 4, PieceType.BUBBLE);
+        //Destroy(pieces[2, 4].gameObject);
+        //SpawNewPiece(2, 4, PieceType.BUBBLE);
 
-        Destroy(pieces[3, 4].gameObject);
-        SpawNewPiece(3, 4, PieceType.BUBBLE);
+        //Destroy(pieces[3, 4].gameObject);
+        //SpawNewPiece(3, 4, PieceType.BUBBLE);
 
-        Destroy(pieces[5, 4].gameObject);
-        SpawNewPiece(5, 4, PieceType.BUBBLE);
+        //Destroy(pieces[5, 4].gameObject);
+        //SpawNewPiece(5, 4, PieceType.BUBBLE);
 
-        Destroy(pieces[6, 4].gameObject);
-        SpawNewPiece(6, 4, PieceType.BUBBLE);
+        //Destroy(pieces[6, 4].gameObject);
+        //SpawNewPiece(6, 4, PieceType.BUBBLE);
 
-        Destroy(pieces[7, 4].gameObject);
-        SpawNewPiece(7, 4, PieceType.BUBBLE);
+        //Destroy(pieces[7, 4].gameObject);
+        //SpawNewPiece(7, 4, PieceType.BUBBLE);
 
-        Destroy(pieces[4, 0].gameObject);
-        SpawNewPiece(4, 0, PieceType.BUBBLE);
+        //Destroy(pieces[4, 0].gameObject);
+        //SpawNewPiece(4, 0, PieceType.BUBBLE);
+
+
 
         StartCoroutine(Fill());
     }
@@ -131,6 +164,7 @@ public class GameGrid : MonoBehaviour
     public IEnumerator Fill()
     {
         bool needRefill = true;
+        IsFilling = true;
         while (needRefill)
         {
             yield return new WaitForSeconds(fillTime * 5);
@@ -141,6 +175,7 @@ public class GameGrid : MonoBehaviour
             }
             needRefill = ClearAllValidMatches();
         }
+        IsFilling = false;
     }
 
     public bool FillStep()
@@ -251,23 +286,49 @@ public class GameGrid : MonoBehaviour
     {
         return (piece1.X == piece2.X && (int)Math.Abs(piece1.Y - piece2.Y) == 1) 
             || (piece1.Y == piece2.Y && (int)Math.Abs(piece1.X - piece2.X) == 1);
-    } 
+    }
 
-    public void SwapPieces(GamePiece piece1, GamePiece piece2) 
+    public void SwapPieces(GamePiece piece1, GamePiece piece2)
     {
+        if (gameOver) return;
+
         if (piece1.IsMovable() && piece2.IsMovable())
         {
 
             pieces[piece1.X, piece1.Y] = piece2;
             pieces[piece2.X, piece2.Y] = piece1;
 
-            if (GetMatch(piece1, piece2.X, piece2.Y) != null || GetMatch(piece2, piece1.X, piece1.Y) != null)
+            if (GetMatch(piece1, piece2.X, piece2.Y) != null || GetMatch(piece2, piece1.X, piece1.Y) != null || piece1.Type == PieceType.RAINBOW  || piece2.Type == PieceType.RAINBOW)
             {
                 int piece1x = piece1.X;
                 int piece1y = piece1.Y;
 
                 piece1.MovableComponent.Move(piece2.X, piece2.Y, fillTime);
                 piece2.MovableComponent.Move(piece1x, piece1y, fillTime);
+                if (piece1.Type == PieceType.RAINBOW && piece1.IsClearable() && piece2.IsColored())
+                {
+                    ClearColorPiece clearColor = piece1.GetComponent<ClearColorPiece>();
+
+                    if (clearColor)
+                    {
+                        clearColor.Color = piece2.ColorComponent.Color;
+                    }
+
+                    ClearPiece(piece1.X, piece1.Y);
+                }
+
+                if (piece2.Type == PieceType.RAINBOW && piece2.IsClearable() && piece1.IsColored())
+                {
+                    ClearColorPiece clearColor = piece2.GetComponent<ClearColorPiece>();
+
+                    if (clearColor)
+                    {
+                        clearColor.Color = piece1.ColorComponent.Color;
+                    }
+
+                    ClearPiece(piece2.X, piece2.Y);
+                }
+
                 ClearAllValidMatches();
 
                 if (piece1.Type == PieceType.ROW_CLEAR || piece1.Type == PieceType.COLUMN_CLEAR)
@@ -283,6 +344,8 @@ public class GameGrid : MonoBehaviour
                 enterdPiece = null;
                 pressedPiece = null;
                 StartCoroutine(Fill());
+
+                level.OnMove();
             }
             else
             {
@@ -756,12 +819,12 @@ public class GameGrid : MonoBehaviour
                     {
                         specialPieceType = PieceType.COLUMN_CLEAR;
                     }
-                } 
+                }
                 //// Spawning a rainbow piece
-                //else if (match.Count >= 5)
-                //{
-                //    specialPieceType = PieceType.Rainbow;
-                //}
+                else if (match.Count >= 5)
+                {
+                    specialPieceType = PieceType.RAINBOW;
+                }
 
                 foreach (var gamePiece in match)
                 {
@@ -786,10 +849,10 @@ public class GameGrid : MonoBehaviour
                 {
                     newPiece.ColorComponent.SetColor(match[0].ColorComponent.Color);
                 }
-                //else if (specialPieceType == PieceType.Rainbow && newPiece.IsColored())
-                //{
-                //    newPiece.ColorComponent.SetColor(ColorType.ANY);
-                //}
+                else if (specialPieceType == PieceType.RAINBOW && newPiece.IsColored())
+                {
+                    newPiece.ColorComponent.SetColor(ColorType.ANY);
+                }
             }
         }
 
@@ -801,6 +864,7 @@ public class GameGrid : MonoBehaviour
         if (!pieces[x, y].IsClearable() || pieces[x, y].ClearableComponent.IsBeingCleared) return false;
 
         pieces[x, y].ClearableComponent.Clear();
+        Audio.IsBlup = true;
         SpawNewPiece(x, y, PieceType.EMPTY);
         ClearObstacles(x, y);
         return true;
@@ -859,5 +923,28 @@ public class GameGrid : MonoBehaviour
                 }
             }
         }
+    }
+
+    public void GameOver()
+    {
+        gameOver = true;
+    }
+
+    public List<GamePiece> GetPiecesOfType(PieceType type)
+    {
+        List<GamePiece > piecesOfType = new List<GamePiece>();
+
+        for (int x = 0; x < xDim; ++x)
+        {
+            for (int y =  x; y < yDim; ++y)
+            {
+                if (pieces[x, y].Type == type)
+                {
+                    piecesOfType.Add(pieces[x, y]);
+                }
+            }
+        }
+
+        return piecesOfType;
     }
 }

@@ -6,6 +6,7 @@ using UnityEngine;
 public class GamePiece : MonoBehaviour
 {
     // Start is called before the first frame update
+    public int score;
     private int x, y;
     public int X { 
         get {
